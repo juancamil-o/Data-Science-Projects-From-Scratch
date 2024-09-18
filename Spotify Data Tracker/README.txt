@@ -1,4 +1,4 @@
-Spotify Data Tracker
+<b>Spotify Data Tracker</b>
 This project is a web application that uses the Spotify API to retrieve and store the recently played tracks of a Spotify user. The app is built with Flask, Spotipy (a Python library to interact with Spotify's API), and stores the data in a local SQLite database.
 
 Features
