@@ -1,0 +1,34 @@
+# 🐍 Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 📦 Entornos virtuales
+venv/
+.env/
+
+# 💾 Archivos de datos locales
+*.json
+*.csv
+*.parquet
+
+# 🧪 Resultados de pruebas o notebooks
+*.ipynb_checkpoints/
+artifacts/
+
+# 🪣 Almacenamiento de datos transformados
+Silver/
+
+# 🗑 Archivos temporales / del sistema
+.DS_Store
+Thumbs.db
+
+# 🚀 Spark / Delta logs y metadatos
+_metastore/
+spark-warehouse/
+.derby/
+logs/
+
+get-pip.py
+prueba.py
