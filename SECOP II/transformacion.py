@@ -11,12 +11,15 @@ delta_path = os.getenv("DELTA_PATH", "Silver")
 def transformarDatosDelDia():
     # Inicializar Spark
     spark = (
-        SparkSession.builder.appName("SECOP II")
-        .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.0.0")
-        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-        .getOrCreate()
-    )
+    SparkSession.builder.appName("SECOP II")
+    .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.0.0,org.apache.hadoop:hadoop-aws:3.3.4")
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+    .config("spark.hadoop.fs.s3a.aws.credentials.provider", "com.amazonaws.auth.DefaultAWSCredentialsProviderChain")
+    .getOrCreate()
+)
+
 
     # Fecha objetivo = AYER
     fecha_objetivo = (date.today() - timedelta(days=1)).isoformat()  # '2025-08-05'
