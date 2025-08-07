@@ -1,7 +1,12 @@
-from main import make_request
+import requests
 from queries import *
 import json
 import os
+
+def make_request(params):
+    BASE_URL = "https://www.datos.gov.co/resource/jbjy-vk9h.json"   
+
+    return requests.get(BASE_URL, params=params)
 
 
 json_path = os.getenv("JSON_PATH", "datosDeHoy.json")
