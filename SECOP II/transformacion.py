@@ -4,6 +4,10 @@ from delta import DeltaTable
 import os
 from datetime import date, timedelta
 
+
+json_path = os.getenv("JSON_PATH", "datosDeHoy.json")
+delta_path = os.getenv("DELTA_PATH", "Silver")
+
 def transformarDatosDelDia():
     # Inicializar Spark
     spark = (
@@ -13,9 +17,6 @@ def transformarDatosDelDia():
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
         .getOrCreate()
     )
-
-    json_path = "/Users/juan/Desktop/Personal Projects/SECOP II/datosDeHoy.json"
-    delta_path = "/Users/juan/Desktop/Personal Projects/SECOP II/Silver"
 
     # Fecha objetivo = AYER
     fecha_objetivo = (date.today() - timedelta(days=1)).isoformat()  # '2025-08-05'

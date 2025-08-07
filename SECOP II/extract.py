@@ -1,7 +1,10 @@
 from main import make_request
 from queries import *
 import json
+import os
 
+
+json_path = os.getenv("JSON_PATH", "datosDeHoy.json")
 
 def extraerContratosDelDia(dia):
     response = make_request(queryFechaDeFirmaDia(dia))
@@ -10,7 +13,7 @@ def extraerContratosDelDia(dia):
         print(f'Número de contratos en la fecha {dia}: {len(data)}')
 
         # Guardar como NDJSON (uno por línea)
-        with open("datosDeHoy.json", "w", encoding="utf-8") as f:
+        with open(json_path, "w", encoding="utf-8") as f:
             for record in data:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
         return len(data)
