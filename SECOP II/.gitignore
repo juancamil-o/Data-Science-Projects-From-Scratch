@@ -30,5 +30,8 @@ spark-warehouse/
 .derby/
 logs/
 
+node_modules/
+yarn.lock
+
 get-pip.py
 prueba.py

@@ -1,70 +1,86 @@
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
-from delta import DeltaTable
+# transformacion.py
 import os
 from datetime import date, timedelta
+import pandas as pd
 
+# -------- Config por defecto (puedes sobreescribir al llamar la función) --------
+DEFAULT_JSON_PATH = os.getenv("JSON_PATH", "datosDeHoy.json")   # NDJSON que generas en extracción
+DEFAULT_OUT_DIR   = os.getenv("OUT_DIR", "datos")               # carpeta Silver
+DEFAULT_FORMAT    = os.getenv("OUT_FORMAT", "parquet")          # "parquet" | "csv" | "ndjson"
 
-json_path = os.getenv("JSON_PATH", "datosDeHoy.json")
-delta_path = os.getenv("DELTA_PATH", "Silver")
+# Campos que solemos normalizar (ajusta a tus columnas reales)
+NUMERIC_COLS = ["nit_entidad", "documento_proveedor", "valor_del_contrato"]
+DATE_COL     = "fecha_de_firma"
 
-def transformarDatosDelDia():
-    # Inicializar Spark
-    spark = (
-    SparkSession.builder.appName("SECOP II")
-    .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.0.0,org.apache.hadoop:hadoop-aws:3.3.4")
-    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-    .config("spark.hadoop.fs.s3a.aws.credentials.provider", "com.amazonaws.auth.DefaultAWSCredentialsProviderChain")
-    .getOrCreate()
-)
+def _ensure_dir(path: str) -> None:
+    os.makedirs(path, exist_ok=True)
 
-
-    # Fecha objetivo = AYER
-    fecha_objetivo = (date.today() - timedelta(days=1)).isoformat()  # '2025-08-05'
-
-    # Validar archivo
-    if not os.path.exists(json_path) or os.path.getsize(json_path) == 0:
-        raise FileNotFoundError(f"El archivo {json_path} no existe o está vacío.")
-
+def _leer_json_flexible(path: str) -> pd.DataFrame:
+    # Soporta JSON Lines y array JSON
     try:
-        # Leer JSON
-        df = spark.read.option("multiLine", "false").json(json_path)
-        print(f"✅ Datos cargados en Spark: {df.count()} registros")
-        print("Esquema detectado:")
-        df.printSchema()
+        return pd.read_json(path, lines=True)
+    except ValueError:
+        return pd.read_json(path)
 
-        # Validar columnas
-        columnas_necesarias = [
-            "nombre_entidad","nit_entidad","departamento","orden","sector","rama",
-            "entidad_centralizada","tipo_de_contrato","modalidad_de_contratacion",
-            "justificacion_modalidad_de","fecha_de_firma","valor_del_contrato",
-            "documento_proveedor","urlproceso"
-        ]
-        columnas_faltantes = [c for c in columnas_necesarias if c not in df.columns]
-        if columnas_faltantes:
-            print(f"⚠ Columnas faltantes: {columnas_faltantes}")
+def _coerce_numeric(df: pd.DataFrame, cols=NUMERIC_COLS) -> pd.DataFrame:
+    for c in cols:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    return df
 
-        # Transformación
-        df_transformado = (
-            df.withColumn("nit_entidad", F.col("nit_entidad").cast("bigint"))
-              .withColumn("documento_proveedor", F.col("documento_proveedor").cast("bigint"))
-              .withColumn("valor_del_contrato", F.col("valor_del_contrato").cast("bigint"))
-              .withColumn("fecha_firma_dia", F.to_date("fecha_de_firma"))  # solo la fecha
-              .select([c for c in columnas_necesarias if c in df.columns] + ["fecha_firma_dia"])
-        )
+def transformar_datos_del_dia(
+    dias_retro: int | str = 1,
+    json_path: str = DEFAULT_JSON_PATH,
+    out_dir: str = DEFAULT_OUT_DIR,
+    out_format: str = DEFAULT_FORMAT,
+) -> tuple[str, int]:
+    """
+    Lee el NDJSON de extracción, limpia tipos y guarda el *subset del día objetivo*
+    como un archivo diario en ./datos/<YYYY-MM-DD>.(parquet|csv|ndjson).
 
-        # Guardar con particionado y replaceWhere
-        df_transformado.write \
-            .format("delta") \
-            .mode("overwrite") \
-            .option("replaceWhere", f"fecha_firma_dia = '{fecha_objetivo}'") \
-            .partitionBy("fecha_firma_dia") \
-            .save(delta_path)
+    Devuelve (ruta_archivo, filas_escritas).
+    """
+    # Normaliza dias_retro
+    try:
+        d = int(dias_retro)
+    except (TypeError, ValueError):
+        raise ValueError("dias_retro debe ser entero o string convertible a entero")
 
-        print(f"✅ Datos del {fecha_objetivo} guardados en Delta en partición correspondiente.")
+    # Fecha objetivo
+    fecha_obj = date.today() - timedelta(days=d)
+    fecha_str = fecha_obj.strftime("%Y-%m-%d")
 
-    except Exception as e:
-        print(f"❌ Error al transformar datos: {e}")
-        raise
+    # Leer datos crudos
+    df = _leer_json_flexible(json_path).copy()
+
+    # Parseo de fecha (si existe) y filtrado del día
+    if DATE_COL in df.columns:
+        df[DATE_COL] = pd.to_datetime(df[DATE_COL], errors="coerce")
+        df = df[df[DATE_COL].dt.strftime("%Y-%m-%d") == fecha_str].copy()
+    else:
+        # Si no existe la columna de fecha, escribimos todo el lote como día objetivo
+        df = df.copy()
+        df["fecha_objetivo"] = fecha_str
+
+    # Normalizaciones
+    df = _coerce_numeric(df)
+
+    # Salida
+    _ensure_dir(out_dir)
+    if out_format.lower() == "parquet":
+        out_path = os.path.join(out_dir, f"{fecha_str}.parquet")
+        # requiere pyarrow instalado
+        df.to_parquet(out_path, index=False)
+    elif out_format.lower() == "csv":
+        out_path = os.path.join(out_dir, f"{fecha_str}.csv")
+        df.to_csv(out_path, index=False)
+    elif out_format.lower() in ("ndjson", "jsonl"):
+        out_path = os.path.join(out_dir, f"{fecha_str}.ndjson")
+        with open(out_path, "w", encoding="utf-8") as f:
+            for rec in df.to_dict(orient="records"):
+                f.write(pd.io.json.dumps(rec, ensure_ascii=False) + "\n")
+    else:
+        raise ValueError("OUT_FORMAT inválido. Usa 'parquet', 'csv' o 'ndjson'.")
+
+    print(f"✅ Silver diario escrito: {out_path} ({len(df)} filas)")
+    return out_path, len(df)

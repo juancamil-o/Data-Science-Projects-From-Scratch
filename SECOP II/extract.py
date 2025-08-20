@@ -11,7 +11,15 @@ def make_request(params):
 
 json_path = os.getenv("JSON_PATH", "datosDeHoy.json")
 
+def calcular_fecha_retro(dias_retro: int = 1) -> str:
+    """
+    Devuelve la fecha en formato YYYY-MM-DD restando `dias_retro` desde hoy.
+    """
+    return (date.today() - timedelta(days=dias_retro)).strftime("%Y-%m-%d")
+
+
 def extraerContratosDelDia(dia):
+    dia = calcular_fecha_retro(dia)
     response = make_request(queryFechaDeFirmaDia(dia))
     if response.status_code == 200:
         data = response.json()
