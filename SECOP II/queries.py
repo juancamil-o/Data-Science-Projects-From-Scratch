@@ -124,7 +124,7 @@ def queryNumeroDeRegistros():
 
 def queryall():
     df = con.execute("""SELECT * FROM read_parquet('datos/*.parquet');
-""").fetchdf()
+    """).fetchdf()
     print(df)
 
 
