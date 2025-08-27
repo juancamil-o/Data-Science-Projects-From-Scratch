@@ -11,5 +11,9 @@ if __name__ == '__main__':
 
     numeroDiasAtras = 1
     if extraerContratosDelDia(numeroDiasAtras) > 0:
-        print(transformar_datos_del_dia(numeroDiasAtras))
-    queryall()
+        transformar_datos_del_dia(
+            dias_retro=1,
+            json_path="datosDeHoy.json",
+            out_dir="s3://proyecto-secop/processed/",   # <-- S3
+            out_format="parquet",                   # parquet recomendado
+        )

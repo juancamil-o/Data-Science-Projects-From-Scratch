@@ -2,21 +2,16 @@
 import os
 from datetime import date, timedelta
 import pandas as pd
+import fsspec  # para NDJSON en S3
 
-# -------- Config por defecto (puedes sobreescribir al llamar la función) --------
-DEFAULT_JSON_PATH = os.getenv("JSON_PATH", "datosDeHoy.json")   # NDJSON que generas en extracción
-DEFAULT_OUT_DIR   = os.getenv("OUT_DIR", "datos")               # carpeta Silver
-DEFAULT_FORMAT    = os.getenv("OUT_FORMAT", "parquet")          # "parquet" | "csv" | "ndjson"
+DEFAULT_JSON_PATH = os.getenv("JSON_PATH", "datosDeHoy.json")
+DEFAULT_OUT_DIR   = os.getenv("OUT_DIR", "datos")  # puede ser "s3://mi-bucket/datos"
+DEFAULT_FORMAT    = os.getenv("OUT_FORMAT", "parquet")
 
-# Campos que solemos normalizar (ajusta a tus columnas reales)
 NUMERIC_COLS = ["nit_entidad", "documento_proveedor", "valor_del_contrato"]
 DATE_COL     = "fecha_de_firma"
 
-def _ensure_dir(path: str) -> None:
-    os.makedirs(path, exist_ok=True)
-
 def _leer_json_flexible(path: str) -> pd.DataFrame:
-    # Soporta JSON Lines y array JSON
     try:
         return pd.read_json(path, lines=True)
     except ValueError:
@@ -31,56 +26,50 @@ def _coerce_numeric(df: pd.DataFrame, cols=NUMERIC_COLS) -> pd.DataFrame:
 def transformar_datos_del_dia(
     dias_retro: int | str = 1,
     json_path: str = DEFAULT_JSON_PATH,
-    out_dir: str = DEFAULT_OUT_DIR,
-    out_format: str = DEFAULT_FORMAT,
+    out_dir: str = DEFAULT_OUT_DIR,                 # <-- acepta "s3://bucket/datos"
+    out_format: str = DEFAULT_FORMAT,               # "parquet" | "csv" | "ndjson"
+    storage_options: dict | None = None,            # dict para credenciales/perfil/endpoint
 ) -> tuple[str, int]:
     """
-    Lee el NDJSON de extracción, limpia tipos y guarda el *subset del día objetivo*
-    como un archivo diario en ./datos/<YYYY-MM-DD>.(parquet|csv|ndjson).
-
-    Devuelve (ruta_archivo, filas_escritas).
+    Escribe un archivo diario en out_dir/AAAA-MM-DD.(parquet|csv|ndjson).
+    Soporta rutas locales y S3.
     """
-    # Normaliza dias_retro
     try:
         d = int(dias_retro)
     except (TypeError, ValueError):
-        raise ValueError("dias_retro debe ser entero o string convertible a entero")
+        raise ValueError("dias_retro debe ser entero o convertible a entero")
 
-    # Fecha objetivo
-    fecha_obj = date.today() - timedelta(days=d)
-    fecha_str = fecha_obj.strftime("%Y-%m-%d")
+    fecha_str = (date.today() - timedelta(days=d)).strftime("%Y-%m-%d")
 
-    # Leer datos crudos
     df = _leer_json_flexible(json_path).copy()
-
-    # Parseo de fecha (si existe) y filtrado del día
     if DATE_COL in df.columns:
         df[DATE_COL] = pd.to_datetime(df[DATE_COL], errors="coerce")
         df = df[df[DATE_COL].dt.strftime("%Y-%m-%d") == fecha_str].copy()
     else:
-        # Si no existe la columna de fecha, escribimos todo el lote como día objetivo
-        df = df.copy()
         df["fecha_objetivo"] = fecha_str
 
-    # Normalizaciones
     df = _coerce_numeric(df)
 
-    # Salida
-    _ensure_dir(out_dir)
-    if out_format.lower() == "parquet":
-        out_path = os.path.join(out_dir, f"{fecha_str}.parquet")
-        # requiere pyarrow instalado
-        df.to_parquet(out_path, index=False)
-    elif out_format.lower() == "csv":
-        out_path = os.path.join(out_dir, f"{fecha_str}.csv")
-        df.to_csv(out_path, index=False)
-    elif out_format.lower() in ("ndjson", "jsonl"):
-        out_path = os.path.join(out_dir, f"{fecha_str}.ndjson")
-        with open(out_path, "w", encoding="utf-8") as f:
+    # Construye la ruta de salida
+    suffix = {"parquet": "parquet", "csv": "csv", "ndjson": "ndjson", "jsonl": "ndjson"}[out_format.lower()]
+    out_path = f"{out_dir.rstrip('/')}/{fecha_str}.{suffix}"
+
+    # Si es local, crea carpeta; en S3 no hace falta (prefijo “lógico”)
+    if not out_dir.startswith("s3://"):
+        os.makedirs(out_dir, exist_ok=True)
+
+    # Escribir según formato
+    if suffix == "parquet":
+        df.to_parquet(out_path, index=False, storage_options=storage_options)
+    elif suffix == "csv":
+        df.to_csv(out_path, index=False, storage_options=storage_options)
+    else:  # ndjson
+        # fsspec gestiona la conexión a S3
+        with fsspec.open(out_path, "w", **(storage_options or {})) as f:
             for rec in df.to_dict(orient="records"):
-                f.write(pd.io.json.dumps(rec, ensure_ascii=False) + "\n")
-    else:
-        raise ValueError("OUT_FORMAT inválido. Usa 'parquet', 'csv' o 'ndjson'.")
+                # evita dependencias extra; usa json estándar
+                import json as _json
+                f.write(_json.dumps(rec, ensure_ascii=False) + "\n")
 
     print(f"✅ Silver diario escrito: {out_path} ({len(df)} filas)")
     return out_path, len(df)

@@ -2,7 +2,11 @@ from datetime import date, datetime
 from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 import duckdb
+import os 
 
+
+con = duckdb.connect()
+DEFAULT_DELTA_PATH = "Silver"  # o "Silver" si esa es la actual
 
 def ayer():
     ayer = datetime.now() - timedelta(days=1)
@@ -64,7 +68,7 @@ def queryTopDiezEntidadesQueMasContrataron():
     con = duckdb.connect()
     df = con.execute("""
         SELECT nombre_entidad, SUM(valor_del_contrato) AS total_contratado
-        FROM 'Silver/part-*.snappy.parquet'
+        FROM delta_scan('{DELTA_PATH}')
         GROUP BY nombre_entidad
         ORDER BY total_contratado DESC
         LIMIT 10;
@@ -72,11 +76,10 @@ def queryTopDiezEntidadesQueMasContrataron():
     print(df)
 
 def queryTopDiezSectoresQueMasContrataron():
-    con = duckdb.connect()
     df = con.execute("""
         SELECT sector,
                SUM(valor_del_contrato) AS total_contratado
-        FROM 'Silver/part-*.snappy.parquet'
+        FROM delta_scan('{DELTA_PATH}')
         GROUP BY sector
         ORDER BY total_contratado DESC
         LIMIT 10;
@@ -119,6 +122,10 @@ def queryNumeroDeRegistros():
     """).fetchdf()
     print(df)
 
+def queryall():
+    df = con.execute("""SELECT * FROM read_parquet('datos/*.parquet');
+""").fetchdf()
+    print(df)
 
 
 
