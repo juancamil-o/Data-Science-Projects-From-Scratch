@@ -9,7 +9,7 @@ if __name__ == '__main__':
     #queryTopDiezSectoresQueMasContrataron()
     #queryPorcentajePorTipoDeContrato()
 
-    numeroDiasAtras = 1
+    numeroDiasAtras = 2
     if extraerContratosDelDia(numeroDiasAtras) > 0:
         transformar_datos_del_dia(
             dias_retro=2,
