@@ -1,6 +1,6 @@
 # 🏗️ Serverless Data Lakehouse on AWS with Open Government Data (SECOP II – Colombia)
 
-![AWS Architecture](./assets/architecture_diagram.png)
+![AWS Architecture](./assets/Arquitectura.png)
 
 ## 📖 Introduction
 
