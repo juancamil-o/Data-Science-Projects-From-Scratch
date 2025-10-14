@@ -1,6 +1,6 @@
 # 🏗️ Serverless Data Lakehouse on AWS with Open Government Data (SECOP II – Colombia)
 
-![AWS Architecture](./assets/Arquitectura.png)
+![AWS Architecture](./assets/Arquitectura.jpeg)
 
 ## 📖 Introduction
 
@@ -57,7 +57,7 @@ A **D-2 ingestion policy** is used — meaning data is processed up to two days 
 
 ## ☁️ Architecture Overview
 
-![Architecture Diagram](./assets/Arquitectura.png)
+![Architecture Diagram](./assets/Arquitectura.jpeg)
 
 This architecture follows a **Medallion (Bronze / Silver / Gold)** model with **serverless orchestration**.
 
